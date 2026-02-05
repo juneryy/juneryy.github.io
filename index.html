@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Net Hours Calculator</title>
+
+<style>
+body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
+h2 { text-align:center; }
+button.siteBtn, button { padding:10px 15px; font-size:16px; margin:5px; border:none; border-radius:8px; cursor:pointer; }
+button.siteBtn { background:#007bff; color:white; }
+button.siteBtn:hover { background:#0056b3; }
+button:hover { background:#ddd; }
+.netBox { border:1px solid #ccc; padding:10px; margin-top:10px; border-radius:8px; transition: all 0.2s; background:white; }
+.netBox.open { border-color: green; background-color: #e6ffe6; }
+.intervalRow { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; align-items:center; }
+.intervalRow input { width:100px; font-size:16px; padding:5px; border-radius:5px; border:1px solid #ccc; }
+.intervalRow button { flex-shrink:0; font-size:14px; padding:5px 8px; border-radius:5px; }
+.totals { display:block; font-weight:bold; margin-top:10px; font-size:16px; }
+label { font-weight:bold; display:block; margin-top:10px; }
+input[type="time"] { font-size:16px; padding:5px; border-radius:5px; border:1px solid #ccc; }
+button:active { transform:scale(0.95); }
+</style>
+</head>
+<body>
+
+<h2>Net Hours Calculator</h2>
+
+<!-- Site selection -->
+<div style="text-align:center;">
+  <button class="siteBtn" onclick="setSite('Palo')">Palo</button>
+  <button class="siteBtn" onclick="setSite('Offsite')">Offsite</button>
+  <button class="siteBtn" onclick="setSite('RECR')">RECR</button>
+</div>
+
+<!-- Time inputs -->
+<label>Default Nets Open Time</label>
+<input type="time" id="defaultOpen">
+
+<label>Current Time</label>
+<input type="time" id="currentTime">
+
+<div style="margin-top:10px;">
+  <button onclick="applyDefault()">Apply Default Open Time</button>
+  <button onclick="calculate()">Calculate</button>
+  <span class="totals" id="totalsDisplay"></span>
+</div>
+
+<div id="netsContainer"></div>
+
+<script>
+// ---- Site Net Configurations ----
+const paloNets = [
+  {name:"5.0", weight:2, intervals:[]},
+  {name:"2.1", weight:2, intervals:[]},
+  {name:"5.5", weight:1, intervals:[]},
+  {name:"5.6", weight:1, intervals:[]},
+  {name:"5.7", weight:1, intervals:[]},
+  {name:"10.1", weight:2, intervals:[]},
+  {name:"10.2", weight:1, intervals:[]},
+  {name:"10.3", weight:1, intervals:[]},
+  {name:"8.5", weight:2, intervals:[]},
+  {name:"8.4", weight:2, intervals:[]},
+  {name:"8.3", weight:2, intervals:[]},
+  {name:"1.4", weight:1, intervals:[]},
+  {name:"2.3", weight:1, intervals:[]},
+  {name:"2.4", weight:1, intervals:[]}
+];
+
+const offsiteNets = [];
+for(let i=1;i<=10;i++) offsiteNets.push({name:i.toString(), weight:1, intervals:[]});
+
+const recrNets = [];
+for(let i=1;i<=11;i++) recrNets.push({name:i.toString(), weight:1, intervals:[]});
+
+// ---- Current Nets (mutable) ----
+let nets = JSON.parse(JSON.stringify(paloNets));
+
+// ---- Helpers ----
+function parseTime(t){ return t ? new Date("2020-01-01T"+t) : null; }
+function netTotalHours(net,current){
+  let total=0;
+  net.intervals.forEach(interval=>{
+    if(!interval.open) return;
+    let open=parseTime(interval.open);
+    let close=interval.close ? parseTime(interval.close) : current;
+    if(!open||!close) return;
+    if(close>current) close=current;
+    let dur=(close-open)/3600000;
+    if(dur>0) total+=dur*net.weight;
+  });
+  return total;
+}
+function calculateMaximumPossible(total,current,sessionEnd){
+  let possible=total;
+  nets.forEach(net=>{
+    net.intervals.forEach(interval=>{
+      if(!interval.open) return;
+      let open=parseTime(interval.open);
+      let close=interval.close ? parseTime(interval.close) : sessionEnd;
+      if(!open||!close) return;
+      if(close<=current) return;
+      let remainingDur=(close-current)/3600000;
+      if(remainingDur>0) possible+=remainingDur*net.weight;
+    });
+  });
+  return possible;
+}
+function totalNetsOpen(current){
+  let count=0;
+  nets.forEach(net=>{
+    net.intervals.forEach(interval=>{
+      if(!interval.open) return;
+      let open=parseTime(interval.open);
+      let close=interval.close ? parseTime(interval.close) : current;
+      if(!open||!close) return;
+      if(open<=current && close>current) count+=net.weight;
+    });
+  });
+  return count;
+}
+
+// ---- Render Nets ----
+function render(){
+  let container=document.getElementById("netsContainer");
+  container.innerHTML="";
+  
+  let currentVal=document.getElementById("currentTime").value;
+  let defaultVal=document.getElementById("defaultOpen").value;
+  let defaultTime=parseTime(defaultVal) || new Date();
+  let current=currentVal ? parseTime(currentVal) : new Date(defaultTime.getTime()+6*3600000);
+  let sessionEnd=new Date(defaultTime.getTime()+6*3600000);
+
+  nets.forEach((net,i)=>{
+    let total=netTotalHours(net,current);
+    let box=document.createElement("div");
+    box.className="netBox";
+    box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) - ${total.toFixed(2)} hrs</b>`;
+
+    let isOpen=false;
+    net.intervals.forEach(interval=>{
+      if(!interval.open) return;
+      let open=parseTime(interval.open);
+      let close=interval.close ? parseTime(interval.close) : current;
+      if(open && close && open<=current && close>current) isOpen=true;
+    });
+    if(isOpen) box.classList.add("open");
+
+    let intervalDiv=document.createElement("div");
+    net.intervals.forEach((interval,j)=>{
+      let row=document.createElement("div");
+      row.className="intervalRow";
+
+      let openLabel=document.createElement("span");
+      openLabel.innerText="Open:";
+      let openInput=document.createElement("input");
+      openInput.type="time";
+      openInput.value=interval.open||"";
+      openInput.oninput=function(){ interval.open=openInput.value; updateTotals(); render(); };
+
+      let closeLabel=document.createElement("span");
+      closeLabel.innerText="Close:";
+      let closeInput=document.createElement("input");
+      closeInput.type="time";
+      closeInput.value=interval.close||"";
+      closeInput.oninput=function(){ interval.close=closeInput.value; updateTotals(); render(); };
+
+      let removeBtn=document.createElement("button");
+      removeBtn.innerText="Remove";
+      removeBtn.onclick=function(){
+        net.intervals.splice(j,1);
+        render();
+        updateTotals();
+      };
+
+      row.appendChild(openLabel);
+      row.appendChild(openInput);
+      row.appendChild(closeLabel);
+      row.appendChild(closeInput);
+      row.appendChild(removeBtn);
+      intervalDiv.appendChild(row);
+    });
+
+    let addBtn=document.createElement("button");
+    addBtn.innerText="Add Interval";
+    addBtn.onclick=function(){ net.intervals.push({open:"",close:""}); render(); updateTotals(); };
+
+    box.appendChild(intervalDiv);
+    box.appendChild(addBtn);
+    container.appendChild(box);
+  });
+
+  updateTotals();
+}
+
+// ---- Apply Default Open ----
+function applyDefault(){
+  let defaultTime=document.getElementById("defaultOpen").value;
+  if(!defaultTime) return;
+  nets.forEach(net=>{ if(net.intervals.length===0) net.intervals.push({open:defaultTime,close:""}); });
+  render();
+}
+
+// ---- Update totals display live ----
+function updateTotals(){
+  let currentVal=document.getElementById("currentTime").value;
+  let defaultVal=document.getElementById("defaultOpen").value;
+  let defaultTime=parseTime(defaultVal) || new Date();
+  let current=currentVal ? parseTime(currentVal) : new Date(defaultTime.getTime()+6*3600000);
+  let sessionEnd=new Date(defaultTime.getTime()+6*3600000);
+
+  nets.forEach(net=>{ net.totalHours = netTotalHours(net,current); });
+
+  let total=0; nets.forEach(net=>{ total+=net.totalHours; });
+
+  let openNets=totalNetsOpen(current);
+  let maxPossible=calculateMaximumPossible(total,current,sessionEnd);
+
+  let totalPossibleHours = nets.reduce((sum,net)=>sum+net.weight*6,0);
+  let threshold = totalPossibleHours * 2/3;
+
+  document.getElementById("totalsDisplay").innerHTML=
+    `Accumulated Net Hours: ${total.toFixed(2)}, Total Nets Open: ${openNets}, Maximum Possible: ${maxPossible.toFixed(2)}, Threshold: ${threshold.toFixed(2)}, Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
+}
+
+// ---- Calculate button ----
+function calculate(){ render(); }
+
+// ---- Switch Sites ----
+function setSite(site){
+  if(site==="Palo") nets = JSON.parse(JSON.stringify(paloNets));
+  else if(site==="Offsite") nets = JSON.parse(JSON.stringify(offsiteNets));
+  else if(site==="RECR") nets = JSON.parse(JSON.stringify(recrNets));
+  render();
+}
+
+// ---- Initial Render ----
+render();
+</script>
+
+</body>
+</html>
