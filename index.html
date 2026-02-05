@@ -26,14 +26,12 @@ button:active { transform:scale(0.95); }
 
 <h2>Net Hours Calculator</h2>
 
-<!-- Site selection -->
 <div style="text-align:center;">
   <button class="siteBtn" onclick="setSite('Palo')">Palo</button>
   <button class="siteBtn" onclick="setSite('Offsite')">Offsite</button>
   <button class="siteBtn" onclick="setSite('RECR')">RECR</button>
 </div>
 
-<!-- Time inputs -->
 <label>Default Nets Open Time</label>
 <input type="time" id="defaultOpen">
 
@@ -135,16 +133,8 @@ function render(){
     let total=netTotalHours(net,current);
     let box=document.createElement("div");
     box.className="netBox";
+    box.id = "netBox-" + net.name;
     box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) - ${total.toFixed(2)} hrs</b>`;
-
-    let isOpen=false;
-    net.intervals.forEach(interval=>{
-      if(!interval.open) return;
-      let open=parseTime(interval.open);
-      let close=interval.close ? parseTime(interval.close) : current;
-      if(open && close && open<=current && close>current) isOpen=true;
-    });
-    if(isOpen) box.classList.add("open");
 
     let intervalDiv=document.createElement("div");
     net.intervals.forEach((interval,j)=>{
@@ -156,14 +146,14 @@ function render(){
       let openInput=document.createElement("input");
       openInput.type="time";
       openInput.value=interval.open||"";
-      openInput.oninput=function(){ interval.open=openInput.value; updateTotals(); render(); };
+      openInput.oninput=function(){ interval.open=openInput.value; updateTotals(); };
 
       let closeLabel=document.createElement("span");
       closeLabel.innerText="Close:";
       let closeInput=document.createElement("input");
       closeInput.type="time";
       closeInput.value=interval.close||"";
-      closeInput.oninput=function(){ interval.close=closeInput.value; updateTotals(); render(); };
+      closeInput.oninput=function(){ interval.close=closeInput.value; updateTotals(); };
 
       let removeBtn=document.createElement("button");
       removeBtn.innerText="Remove";
@@ -209,17 +199,29 @@ function updateTotals(){
   let current=currentVal ? parseTime(currentVal) : new Date(defaultTime.getTime()+6*3600000);
   let sessionEnd=new Date(defaultTime.getTime()+6*3600000);
 
-  nets.forEach(net=>{ net.totalHours = netTotalHours(net,current); });
+  nets.forEach(net=>{
+    net.totalHours = netTotalHours(net,current);
 
-  let total=0; nets.forEach(net=>{ total+=net.totalHours; });
+    // update green highlight dynamically
+    let netBox = document.getElementById("netBox-" + net.name);
+    if(netBox){
+      let isOpen = net.intervals.some(interval => {
+        let open = parseTime(interval.open);
+        let close = interval.close ? parseTime(interval.close) : current;
+        return open && close && open <= current && close > current;
+      });
+      if(isOpen) netBox.classList.add("open");
+      else netBox.classList.remove("open");
+    }
+  });
 
-  let openNets=totalNetsOpen(current);
-  let maxPossible=calculateMaximumPossible(total,current,sessionEnd);
-
+  let total = nets.reduce((sum,net)=>sum+net.totalHours,0);
+  let openNets = totalNetsOpen(current);
+  let maxPossible = calculateMaximumPossible(total,current,sessionEnd);
   let totalPossibleHours = nets.reduce((sum,net)=>sum+net.weight*6,0);
   let threshold = totalPossibleHours * 2/3;
 
-  document.getElementById("totalsDisplay").innerHTML=
+  document.getElementById("totalsDisplay").innerHTML =
     `Accumulated Net Hours: ${total.toFixed(2)}, Total Nets Open: ${openNets}, Maximum Possible: ${maxPossible.toFixed(2)}, Threshold: ${threshold.toFixed(2)}, Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
 }
 
