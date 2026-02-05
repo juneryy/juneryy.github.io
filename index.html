@@ -222,7 +222,11 @@ function updateTotals(){
   let threshold = totalPossibleHours * 2/3;
 
   document.getElementById("totalsDisplay").innerHTML =
-    `Accumulated Net Hours: ${total.toFixed(2)}, Total Nets Open: ${openNets}, Maximum Possible: ${maxPossible.toFixed(2)}, Threshold: ${threshold.toFixed(2)}, Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
+    `Accumulated Net Hours: ${total.toFixed(2)}<br>` +
+    `Total Nets Open: ${openNets}<br>` +
+    `Maximum Possible: ${maxPossible.toFixed(2)}<br>` +
+    `Threshold: ${threshold.toFixed(2)}<br>` +
+    `Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
 }
 
 // ---- Calculate button ----
