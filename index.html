@@ -6,7 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Net Hours">
-<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/616/616408.png">
+
+<!-- Eagle Icon -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦅</text></svg>">
 
 <title>Net Hours Calculator</title>
 
@@ -24,7 +26,6 @@ button.siteBtn, button {
 }
 
 button.siteBtn { background:#007bff; color:white; }
-button.siteBtn:hover { background:#0056b3; }
 
 .netBox {
   border:2px solid #ccc;
@@ -143,6 +144,10 @@ function netTotalHours(net,current){
   return total;
 }
 
+function netHasEverOpened(net){
+  return net.intervals.some(i => i.open);
+}
+
 function netIsCurrentlyOpen(net,current){
   return net.intervals.some(int=>{
     if(!int.open) return false;
@@ -150,11 +155,6 @@ function netIsCurrentlyOpen(net,current){
     let close=int.close ? parseTime(int.close) : current;
     return open<=current && close>current;
   });
-}
-
-function netIsClosed(net,current){
-  if(net.intervals.length===0) return false;
-  return !netIsCurrentlyOpen(net,current);
 }
 
 function totalNetsOpen(current){
@@ -173,19 +173,21 @@ function render(){
   container.innerHTML="";
 
   const defaultVal=document.getElementById("defaultOpen").value;
-  const currentVal=document.getElementById("currentTime").value;
-
   if(!defaultVal) return;
 
   let defaultTime=parseTime(defaultVal);
+  let currentVal=document.getElementById("currentTime").value;
   let current=currentVal ? parseTime(currentVal) : sessionEndTime(defaultTime);
 
-  nets.forEach((net,i)=>{
+  nets.forEach(net=>{
 
     let box=document.createElement("div");
     box.className="netBox";
 
-    if(netIsClosed(net,current)) box.classList.add("closed");
+    // FIXED CLOSED LOGIC
+    if(netHasEverOpened(net) && !netIsCurrentlyOpen(net,current)){
+      box.classList.add("closed");
+    }
 
     let total=netTotalHours(net,current);
 
@@ -247,8 +249,7 @@ function updateTotals(){
   let maxPossible=0;
 
   nets.forEach(net=>{
-    let total=netTotalHours(net,current);
-    accumulated+=total;
+    accumulated+=netTotalHours(net,current);
 
     net.intervals.forEach(int=>{
       if(!int.open) return;
@@ -287,7 +288,7 @@ function applyDefault(){
     if(net.intervals.length===0){
       net.intervals.push({open:val, close:""});
     } else {
-      net.intervals.forEach(i=>i.open=val);
+      net.intervals[0].open = val;
     }
   });
 
