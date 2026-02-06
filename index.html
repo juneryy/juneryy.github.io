@@ -1,27 +1,70 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Net Hours">
+<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/616/616408.png">
+
 <title>Net Hours Calculator</title>
 
 <style>
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
-button.siteBtn, button { padding:10px 15px; font-size:16px; margin:5px; border:none; border-radius:8px; cursor:pointer; }
+
+button.siteBtn, button {
+  padding:10px 15px;
+  font-size:16px;
+  margin:5px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
 button.siteBtn { background:#007bff; color:white; }
 button.siteBtn:hover { background:#0056b3; }
-button:hover { background:#ddd; }
-.netBox { border:1px solid #ccc; padding:10px; margin-top:10px; border-radius:8px; transition: all 0.2s; background:white; }
-.netBox.open { border-color: green; background-color: #e6ffe6; }
-.intervalRow { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; align-items:center; }
-.intervalRow input { width:100px; font-size:16px; padding:5px; border-radius:5px; border:1px solid #ccc; }
-.intervalRow button { flex-shrink:0; font-size:14px; padding:5px 8px; border-radius:5px; }
-.totals { display:block; font-weight:bold; margin-top:10px; font-size:16px; }
+
+.netBox {
+  border:2px solid #ccc;
+  padding:10px;
+  margin-top:10px;
+  border-radius:8px;
+  background:white;
+}
+
+.netBox.closed {
+  border-color:red;
+  background:#ffe6e6;
+}
+
+.intervalRow {
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:6px;
+  align-items:center;
+}
+
+.intervalRow input {
+  width:110px;
+  font-size:16px;
+  padding:5px;
+}
+
+.totals {
+  display:block;
+  font-weight:bold;
+  margin-top:10px;
+  font-size:16px;
+}
+
 label { font-weight:bold; display:block; margin-top:10px; }
-input[type="time"] { font-size:16px; padding:5px; border-radius:5px; border:1px solid #ccc; }
-button:active { transform:scale(0.95); }
+
 </style>
 </head>
+
 <body>
 
 <h2>Net Hours Calculator</h2>
@@ -36,146 +79,150 @@ button:active { transform:scale(0.95); }
 <input type="time" id="defaultOpen">
 
 <label>Current Time</label>
-<input type="time" id="currentTime">
+<input type="time" id="currentTime" oninput="updateTotals()">
 
-<div style="margin-top:10px;">
+<div>
   <button onclick="applyDefault()">Apply Default Open Time</button>
-  <button onclick="calculate()">Calculate</button>
+  <button onclick="render()">Calculate</button>
   <span class="totals" id="totalsDisplay"></span>
 </div>
 
 <div id="netsContainer"></div>
 
 <script>
-// ---- Site Net Configurations ----
-const paloNets = [
-  {name:"5.0", weight:2, intervals:[]},
-  {name:"2.1", weight:2, intervals:[]},
-  {name:"5.5", weight:1, intervals:[]},
-  {name:"5.6", weight:1, intervals:[]},
-  {name:"5.7", weight:1, intervals:[]},
-  {name:"10.1", weight:2, intervals:[]},
-  {name:"10.2", weight:1, intervals:[]},
-  {name:"10.3", weight:1, intervals:[]},
-  {name:"8.5", weight:2, intervals:[]},
-  {name:"8.4", weight:2, intervals:[]},
-  {name:"8.3", weight:2, intervals:[]},
-  {name:"1.4", weight:1, intervals:[]},
-  {name:"2.3", weight:1, intervals:[]},
-  {name:"2.4", weight:1, intervals:[]}
+
+/* ---------- SITE CONFIG ---------- */
+
+const paloTemplate = [
+  {name:"5.0", weight:2},{name:"2.1", weight:2},{name:"5.5", weight:1},
+  {name:"5.6", weight:1},{name:"5.7", weight:1},{name:"10.1", weight:2},
+  {name:"10.2", weight:1},{name:"10.3", weight:1},{name:"8.5", weight:2},
+  {name:"8.4", weight:2},{name:"8.3", weight:2},{name:"1.4", weight:1},
+  {name:"2.3", weight:1},{name:"2.4", weight:1}
 ];
 
-const offsiteNets = [];
-for(let i=1;i<=10;i++) offsiteNets.push({name:i.toString(), weight:1, intervals:[]});
+function numberedTemplate(n){
+  return Array.from({length:n}, (_,i)=>({name:(i+1).toString(), weight:1}));
+}
 
-const recrNets = [];
-for(let i=1;i<=11;i++) recrNets.push({name:i.toString(), weight:1, intervals:[]});
+let nets = [];
+setSite("Palo");
 
-// ---- Current Nets (mutable) ----
-let nets = JSON.parse(JSON.stringify(paloNets));
+/* ---------- HELPERS ---------- */
 
-// ---- Helpers ----
-function parseTime(t){ return t ? new Date("2020-01-01T"+t) : null; }
+function cloneTemplate(template){
+  return template.map(n=>({name:n.name, weight:n.weight, intervals:[]}));
+}
+
+function parseTime(t){
+  if(!t) return null;
+  return new Date("2020-01-01T"+t);
+}
+
+function sessionEndTime(defaultOpen){
+  return new Date(defaultOpen.getTime()+6*3600000);
+}
+
+/* ---------- CORE CALCULATIONS ---------- */
+
 function netTotalHours(net,current){
   let total=0;
-  net.intervals.forEach(interval=>{
-    if(!interval.open) return;
-    let open=parseTime(interval.open);
-    let close=interval.close ? parseTime(interval.close) : current;
-    if(!open||!close) return;
+
+  net.intervals.forEach(int=>{
+    if(!int.open) return;
+
+    let open=parseTime(int.open);
+    let close=int.close ? parseTime(int.close) : current;
+
     if(close>current) close=current;
+
     let dur=(close-open)/3600000;
     if(dur>0) total+=dur*net.weight;
   });
+
   return total;
 }
-function calculateMaximumPossible(total,current,sessionEnd){
-  let possible=total;
-  nets.forEach(net=>{
-    net.intervals.forEach(interval=>{
-      if(!interval.open) return;
-      let open=parseTime(interval.open);
-      let close=interval.close ? parseTime(interval.close) : sessionEnd;
-      if(!open||!close) return;
-      if(close<=current) return;
-      let remainingDur=(close-current)/3600000;
-      if(remainingDur>0) possible+=remainingDur*net.weight;
-    });
+
+function netIsCurrentlyOpen(net,current){
+  return net.intervals.some(int=>{
+    if(!int.open) return false;
+    let open=parseTime(int.open);
+    let close=int.close ? parseTime(int.close) : current;
+    return open<=current && close>current;
   });
-  return possible;
-}
-function totalNetsOpen(current){
-  let count=0;
-  nets.forEach(net=>{
-    net.intervals.forEach(interval=>{
-      if(!interval.open) return;
-      let open=parseTime(interval.open);
-      let close=interval.close ? parseTime(interval.close) : current;
-      if(!open||!close) return;
-      if(open<=current && close>current) count+=net.weight;
-    });
-  });
-  return count;
 }
 
-// ---- Render Nets ----
+function netIsClosed(net,current){
+  if(net.intervals.length===0) return false;
+  return !netIsCurrentlyOpen(net,current);
+}
+
+function totalNetsOpen(current){
+  let total=0;
+  nets.forEach(net=>{
+    if(netIsCurrentlyOpen(net,current)) total+=net.weight;
+  });
+  return total;
+}
+
+/* ---------- RENDER ---------- */
+
 function render(){
-  let container=document.getElementById("netsContainer");
+
+  const container=document.getElementById("netsContainer");
   container.innerHTML="";
-  
-  let currentVal=document.getElementById("currentTime").value;
-  let defaultVal=document.getElementById("defaultOpen").value;
-  let defaultTime=parseTime(defaultVal) || new Date();
-  let current=currentVal ? parseTime(currentVal) : new Date(defaultTime.getTime()+6*3600000);
-  let sessionEnd=new Date(defaultTime.getTime()+6*3600000);
+
+  const defaultVal=document.getElementById("defaultOpen").value;
+  const currentVal=document.getElementById("currentTime").value;
+
+  if(!defaultVal) return;
+
+  let defaultTime=parseTime(defaultVal);
+  let current=currentVal ? parseTime(currentVal) : sessionEndTime(defaultTime);
 
   nets.forEach((net,i)=>{
-    let total=netTotalHours(net,current);
+
     let box=document.createElement("div");
     box.className="netBox";
-    box.id = "netBox-" + net.name;
-    box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) - ${total.toFixed(2)} hrs</b>`;
 
-    let intervalDiv=document.createElement("div");
+    if(netIsClosed(net,current)) box.classList.add("closed");
+
+    let total=netTotalHours(net,current);
+
+    box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) — ${total.toFixed(2)} hrs</b>`;
+
     net.intervals.forEach((interval,j)=>{
+
       let row=document.createElement("div");
       row.className="intervalRow";
 
-      let openLabel=document.createElement("span");
-      openLabel.innerText="Open:";
-      let openInput=document.createElement("input");
-      openInput.type="time";
-      openInput.value=interval.open||"";
-      openInput.oninput=function(){ interval.open=openInput.value; updateTotals(); };
+      row.innerHTML = `
+        Open:
+        <input type="time" value="${interval.open||""}">
+        Close:
+        <input type="time" value="${interval.close||""}">
+        <button>Remove</button>
+      `;
 
-      let closeLabel=document.createElement("span");
-      closeLabel.innerText="Close:";
-      let closeInput=document.createElement("input");
-      closeInput.type="time";
-      closeInput.value=interval.close||"";
-      closeInput.oninput=function(){ interval.close=closeInput.value; updateTotals(); };
+      let inputs=row.querySelectorAll("input");
+      inputs[0].oninput=e=>{ interval.open=e.target.value; updateTotals(); };
+      inputs[1].oninput=e=>{ interval.close=e.target.value; updateTotals(); };
 
-      let removeBtn=document.createElement("button");
-      removeBtn.innerText="Remove";
-      removeBtn.onclick=function(){
+      row.querySelector("button").onclick=()=>{
         net.intervals.splice(j,1);
         render();
-        updateTotals();
       };
 
-      row.appendChild(openLabel);
-      row.appendChild(openInput);
-      row.appendChild(closeLabel);
-      row.appendChild(closeInput);
-      row.appendChild(removeBtn);
-      intervalDiv.appendChild(row);
+      box.appendChild(row);
     });
 
     let addBtn=document.createElement("button");
     addBtn.innerText="Add Interval";
-    addBtn.onclick=function(){ net.intervals.push({open:"",close:""}); render(); updateTotals(); };
+    addBtn.onclick=()=>{
+      net.intervals.push({open:"",close:""});
+      render();
+    };
 
-    box.appendChild(intervalDiv);
     box.appendChild(addBtn);
     container.appendChild(box);
   });
@@ -183,65 +230,79 @@ function render(){
   updateTotals();
 }
 
-// ---- Apply Default Open ----
-function applyDefault(){
-  let defaultTime=document.getElementById("defaultOpen").value;
-  if(!defaultTime) return;
-  nets.forEach(net=>{ if(net.intervals.length===0) net.intervals.push({open:defaultTime,close:""}); });
-  render();
-}
+/* ---------- TOTAL DISPLAY ---------- */
 
-// ---- Update totals display live ----
 function updateTotals(){
-  let currentVal=document.getElementById("currentTime").value;
-  let defaultVal=document.getElementById("defaultOpen").value;
-  let defaultTime=parseTime(defaultVal) || new Date();
-  let current=currentVal ? parseTime(currentVal) : new Date(defaultTime.getTime()+6*3600000);
-  let sessionEnd=new Date(defaultTime.getTime()+6*3600000);
+
+  const defaultVal=document.getElementById("defaultOpen").value;
+  if(!defaultVal) return;
+
+  const currentVal=document.getElementById("currentTime").value;
+
+  let defaultTime=parseTime(defaultVal);
+  let current=currentVal ? parseTime(currentVal) : sessionEndTime(defaultTime);
+  let sessionEnd=sessionEndTime(defaultTime);
+
+  let accumulated=0;
+  let maxPossible=0;
 
   nets.forEach(net=>{
-    net.totalHours = netTotalHours(net,current);
+    let total=netTotalHours(net,current);
+    accumulated+=total;
 
-    // update green highlight dynamically
-    let netBox = document.getElementById("netBox-" + net.name);
-    if(netBox){
-      let isOpen = net.intervals.some(interval => {
-        let open = parseTime(interval.open);
-        let close = interval.close ? parseTime(interval.close) : current;
-        return open && close && open <= current && close > current;
-      });
-      if(isOpen) netBox.classList.add("open");
-      else netBox.classList.remove("open");
+    net.intervals.forEach(int=>{
+      if(!int.open) return;
+
+      let open=parseTime(int.open);
+      let close=int.close ? parseTime(int.close) : sessionEnd;
+
+      if(close>current){
+        let remaining=(close-current)/3600000;
+        if(remaining>0) maxPossible+=remaining*net.weight;
+      }
+    });
+  });
+
+  maxPossible+=accumulated;
+
+  let totalPossible=nets.reduce((s,n)=>s+n.weight*6,0);
+  let threshold=totalPossible*(2/3);
+
+  document.getElementById("totalsDisplay").innerHTML =
+    `Accumulated Net Hours: ${accumulated.toFixed(2)}<br>
+     Total Nets Open: ${totalNetsOpen(current)}<br>
+     Maximum Possible: ${maxPossible.toFixed(2)}<br>
+     Threshold: ${threshold.toFixed(2)}<br>
+     Status: ${maxPossible>=threshold ? "✅ Reachable" : "❌ Not Reachable"}`;
+}
+
+/* ---------- BUTTON ACTIONS ---------- */
+
+function applyDefault(){
+
+  let val=document.getElementById("defaultOpen").value;
+  if(!val) return;
+
+  nets.forEach(net=>{
+    if(net.intervals.length===0){
+      net.intervals.push({open:val, close:""});
+    } else {
+      net.intervals.forEach(i=>i.open=val);
     }
   });
 
-  let total = nets.reduce((sum,net)=>sum+net.totalHours,0);
-  let openNets = totalNetsOpen(current);
-  let maxPossible = calculateMaximumPossible(total,current,sessionEnd);
-  let totalPossibleHours = nets.reduce((sum,net)=>sum+net.weight*6,0);
-  let threshold = totalPossibleHours * 2/3;
-
-  document.getElementById("totalsDisplay").innerHTML =
-    `Accumulated Net Hours: ${total.toFixed(2)}<br>` +
-    `Total Nets Open: ${openNets}<br>` +
-    `Maximum Possible: ${maxPossible.toFixed(2)}<br>` +
-    `Threshold: ${threshold.toFixed(2)}<br>` +
-    `Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
-}
-
-// ---- Calculate button ----
-function calculate(){ render(); }
-
-// ---- Switch Sites ----
-function setSite(site){
-  if(site==="Palo") nets = JSON.parse(JSON.stringify(paloNets));
-  else if(site==="Offsite") nets = JSON.parse(JSON.stringify(offsiteNets));
-  else if(site==="RECR") nets = JSON.parse(JSON.stringify(recrNets));
   render();
 }
 
-// ---- Initial Render ----
-render();
+function setSite(site){
+
+  if(site==="Palo") nets=cloneTemplate(paloTemplate);
+  if(site==="Offsite") nets=cloneTemplate(numberedTemplate(10));
+  if(site==="RECR") nets=cloneTemplate(numberedTemplate(11));
+
+  render();
+}
+
 </script>
 
 </body>
