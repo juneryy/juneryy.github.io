@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Net Hours">
 
-<!-- Eagle Icon -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦅</text></svg>">
 
 <title>Net Hours Calculator</title>
@@ -16,16 +15,7 @@
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
 
-button.siteBtn, button {
-  padding:10px 15px;
-  font-size:16px;
-  margin:5px;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-button.siteBtn { background:#007bff; color:white; }
+button { padding:8px 12px; margin:4px; font-size:16px; border:none; border-radius:8px; background:#007bff; color:white; }
 
 .netBox {
   border:2px solid #ccc;
@@ -51,17 +41,9 @@ button.siteBtn { background:#007bff; color:white; }
 .intervalRow input {
   width:110px;
   font-size:16px;
-  padding:5px;
 }
 
-.totals {
-  display:block;
-  font-weight:bold;
-  margin-top:10px;
-  font-size:16px;
-}
-
-label { font-weight:bold; display:block; margin-top:10px; }
+.totals { font-weight:bold; margin-top:10px; }
 
 </style>
 </head>
@@ -71,9 +53,9 @@ label { font-weight:bold; display:block; margin-top:10px; }
 <h2>Net Hours Calculator</h2>
 
 <div style="text-align:center;">
-  <button class="siteBtn" onclick="setSite('Palo')">Palo</button>
-  <button class="siteBtn" onclick="setSite('Offsite')">Offsite</button>
-  <button class="siteBtn" onclick="setSite('RECR')">RECR</button>
+<button onclick="setSite('Palo')">Palo</button>
+<button onclick="setSite('Offsite')">Offsite</button>
+<button onclick="setSite('RECR')">RECR</button>
 </div>
 
 <label>Default Nets Open Time</label>
@@ -83,16 +65,16 @@ label { font-weight:bold; display:block; margin-top:10px; }
 <input type="time" id="currentTime" oninput="updateTotals()">
 
 <div>
-  <button onclick="applyDefault()">Apply Default Open Time</button>
-  <button onclick="render()">Calculate</button>
-  <span class="totals" id="totalsDisplay"></span>
+<button onclick="applyDefault()">Apply Default Open Time</button>
+<button onclick="render()">Calculate</button>
+<div class="totals" id="totalsDisplay"></div>
 </div>
 
 <div id="netsContainer"></div>
 
 <script>
 
-/* ---------- SITE CONFIG ---------- */
+/* ---------- SITE SETUP ---------- */
 
 const paloTemplate = [
   {name:"5.0", weight:2},{name:"2.1", weight:2},{name:"5.5", weight:1},
@@ -106,25 +88,33 @@ function numberedTemplate(n){
   return Array.from({length:n}, (_,i)=>({name:(i+1).toString(), weight:1}));
 }
 
-let nets = [];
+let nets=[];
 setSite("Palo");
-
-/* ---------- HELPERS ---------- */
 
 function cloneTemplate(template){
   return template.map(n=>({name:n.name, weight:n.weight, intervals:[]}));
 }
+
+/* ---------- HELPERS ---------- */
 
 function parseTime(t){
   if(!t) return null;
   return new Date("2020-01-01T"+t);
 }
 
-function sessionEndTime(defaultOpen){
-  return new Date(defaultOpen.getTime()+6*3600000);
+function sessionEnd(open){
+  return new Date(open.getTime()+6*3600000);
 }
 
-/* ---------- CORE CALCULATIONS ---------- */
+/* ---------- STATUS RULES ---------- */
+
+function netIsOpen(net){
+  if(net.intervals.length===0) return false;
+  let last=net.intervals[net.intervals.length-1];
+  return last.open && !last.close;
+}
+
+/* ---------- CALCULATIONS ---------- */
 
 function netTotalHours(net,current){
   let total=0;
@@ -144,23 +134,10 @@ function netTotalHours(net,current){
   return total;
 }
 
-function netHasEverOpened(net){
-  return net.intervals.some(i => i.open);
-}
-
-function netIsCurrentlyOpen(net,current){
-  return net.intervals.some(int=>{
-    if(!int.open) return false;
-    let open=parseTime(int.open);
-    let close=int.close ? parseTime(int.close) : current;
-    return open<=current && close>current;
-  });
-}
-
-function totalNetsOpen(current){
+function totalNetsOpen(){
   let total=0;
   nets.forEach(net=>{
-    if(netIsCurrentlyOpen(net,current)) total+=net.weight;
+    if(netIsOpen(net)) total+=net.weight;
   });
   return total;
 }
@@ -169,25 +146,21 @@ function totalNetsOpen(current){
 
 function render(){
 
-  const container=document.getElementById("netsContainer");
+  let container=document.getElementById("netsContainer");
   container.innerHTML="";
 
-  const defaultVal=document.getElementById("defaultOpen").value;
+  let defaultVal=document.getElementById("defaultOpen").value;
   if(!defaultVal) return;
 
-  let defaultTime=parseTime(defaultVal);
   let currentVal=document.getElementById("currentTime").value;
-  let current=currentVal ? parseTime(currentVal) : sessionEndTime(defaultTime);
+  let current=currentVal ? parseTime(currentVal) : sessionEnd(parseTime(defaultVal));
 
   nets.forEach(net=>{
 
     let box=document.createElement("div");
     box.className="netBox";
 
-    // FIXED CLOSED LOGIC
-    if(netHasEverOpened(net) && !netIsCurrentlyOpen(net,current)){
-      box.classList.add("closed");
-    }
+    if(!netIsOpen(net)) box.classList.add("closed");
 
     let total=netTotalHours(net,current);
 
@@ -198,11 +171,9 @@ function render(){
       let row=document.createElement("div");
       row.className="intervalRow";
 
-      row.innerHTML = `
-        Open:
-        <input type="time" value="${interval.open||""}">
-        Close:
-        <input type="time" value="${interval.close||""}">
+      row.innerHTML=`
+        Open: <input type="time" value="${interval.open||""}">
+        Close: <input type="time" value="${interval.close||""}">
         <button>Remove</button>
       `;
 
@@ -221,7 +192,7 @@ function render(){
     let addBtn=document.createElement("button");
     addBtn.innerText="Add Interval";
     addBtn.onclick=()=>{
-      net.intervals.push({open:"",close:""});
+      net.intervals.push({open:"", close:""});
       render();
     };
 
@@ -236,14 +207,11 @@ function render(){
 
 function updateTotals(){
 
-  const defaultVal=document.getElementById("defaultOpen").value;
+  let defaultVal=document.getElementById("defaultOpen").value;
   if(!defaultVal) return;
 
-  const currentVal=document.getElementById("currentTime").value;
-
-  let defaultTime=parseTime(defaultVal);
-  let current=currentVal ? parseTime(currentVal) : sessionEndTime(defaultTime);
-  let sessionEnd=sessionEndTime(defaultTime);
+  let currentVal=document.getElementById("currentTime").value;
+  let current=currentVal ? parseTime(currentVal) : sessionEnd(parseTime(defaultVal));
 
   let accumulated=0;
   let maxPossible=0;
@@ -251,17 +219,12 @@ function updateTotals(){
   nets.forEach(net=>{
     accumulated+=netTotalHours(net,current);
 
-    net.intervals.forEach(int=>{
-      if(!int.open) return;
-
-      let open=parseTime(int.open);
-      let close=int.close ? parseTime(int.close) : sessionEnd;
-
-      if(close>current){
-        let remaining=(close-current)/3600000;
-        if(remaining>0) maxPossible+=remaining*net.weight;
-      }
-    });
+    if(netIsOpen(net)){
+      let last=net.intervals[net.intervals.length-1];
+      let open=parseTime(last.open);
+      let remaining=(sessionEnd(parseTime(defaultVal))-current)/3600000;
+      if(remaining>0) maxPossible+=remaining*net.weight;
+    }
   });
 
   maxPossible+=accumulated;
@@ -269,38 +232,31 @@ function updateTotals(){
   let totalPossible=nets.reduce((s,n)=>s+n.weight*6,0);
   let threshold=totalPossible*(2/3);
 
-  document.getElementById("totalsDisplay").innerHTML =
+  document.getElementById("totalsDisplay").innerHTML=
     `Accumulated Net Hours: ${accumulated.toFixed(2)}<br>
-     Total Nets Open: ${totalNetsOpen(current)}<br>
+     Total Nets Open: ${totalNetsOpen()}<br>
      Maximum Possible: ${maxPossible.toFixed(2)}<br>
      Threshold: ${threshold.toFixed(2)}<br>
-     Status: ${maxPossible>=threshold ? "✅ Reachable" : "❌ Not Reachable"}`;
+     Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
 }
 
-/* ---------- BUTTON ACTIONS ---------- */
+/* ---------- BUTTONS ---------- */
 
 function applyDefault(){
-
   let val=document.getElementById("defaultOpen").value;
   if(!val) return;
 
   nets.forEach(net=>{
-    if(net.intervals.length===0){
-      net.intervals.push({open:val, close:""});
-    } else {
-      net.intervals[0].open = val;
-    }
+    net.intervals=[{open:val, close:""}];
   });
 
   render();
 }
 
 function setSite(site){
-
   if(site==="Palo") nets=cloneTemplate(paloTemplate);
   if(site==="Offsite") nets=cloneTemplate(numberedTemplate(10));
   if(site==="RECR") nets=cloneTemplate(numberedTemplate(11));
-
   render();
 }
 
