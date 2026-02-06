@@ -12,11 +12,27 @@
 <title>Net Hours Calculator</title>
 
 <style>
+
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
 
-button { padding:8px 12px; margin:4px; font-size:16px; border:none; border-radius:8px; background:#007bff; color:white; }
+/* Buttons */
+button {
+  padding:7px 10px;
+  margin:4px 3px;
+  font-size:15px;
+  border:none;
+  border-radius:8px;
+  background:#007bff;
+  color:white;
+}
 
+/* Header layout */
+.timeRow {
+  margin-top:10px;
+}
+
+/* Net boxes */
 .netBox {
   border:2px solid #ccc;
   padding:10px;
@@ -30,20 +46,29 @@ button { padding:8px 12px; margin:4px; font-size:16px; border:none; border-radiu
   background:#ffe6e6;
 }
 
+/* Interval rows */
 .intervalRow {
   display:flex;
-  flex-wrap:wrap;
-  gap:5px;
+  flex-wrap:nowrap;   /* prevents wrapping */
+  gap:4px;
   margin-top:6px;
   align-items:center;
 }
 
 .intervalRow input {
-  width:110px;
-  font-size:16px;
+  width:85px;         /* smaller width fixes wrapping */
+  font-size:15px;
 }
 
-.totals { font-weight:bold; margin-top:10px; }
+.intervalRow span {
+  font-size:14px;
+  white-space:nowrap;
+}
+
+.totals {
+  font-weight:bold;
+  margin-top:10px;
+}
 
 </style>
 </head>
@@ -58,11 +83,17 @@ button { padding:8px 12px; margin:4px; font-size:16px; border:none; border-radiu
 <button onclick="setSite('RECR')">RECR</button>
 </div>
 
+<!-- Separate header rows -->
+
+<div class="timeRow">
 <label>Default Nets Open Time</label>
 <input type="time" id="defaultOpen">
+</div>
 
+<div class="timeRow">
 <label>Current Time</label>
 <input type="time" id="currentTime" oninput="updateTotals()">
+</div>
 
 <div>
 <button onclick="applyDefault()">Apply Default Open Time</button>
@@ -106,7 +137,7 @@ function sessionEnd(open){
   return new Date(open.getTime()+6*3600000);
 }
 
-/* ---------- STATUS RULES ---------- */
+/* ---------- STATUS ---------- */
 
 function netIsOpen(net){
   if(net.intervals.length===0) return false;
@@ -172,9 +203,11 @@ function render(){
       row.className="intervalRow";
 
       row.innerHTML=`
-        Open: <input type="time" value="${interval.open||""}">
-        Close: <input type="time" value="${interval.close||""}">
-        <button>Remove</button>
+        <span>Open:</span>
+        <input type="time" value="${interval.open||""}">
+        <span>Close:</span>
+        <input type="time" value="${interval.close||""}">
+        <button>✕</button>
       `;
 
       let inputs=row.querySelectorAll("input");
@@ -220,8 +253,6 @@ function updateTotals(){
     accumulated+=netTotalHours(net,current);
 
     if(netIsOpen(net)){
-      let last=net.intervals[net.intervals.length-1];
-      let open=parseTime(last.open);
       let remaining=(sessionEnd(parseTime(defaultVal))-current)/3600000;
       if(remaining>0) maxPossible+=remaining*net.weight;
     }
