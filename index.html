@@ -12,14 +12,13 @@
 <title>Net Hours Calculator</title>
 
 <style>
-
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
 
 button {
-  padding:7px 10px;
+  padding:6px 9px;
   margin:4px 3px;
-  font-size:15px;
+  font-size:14px;
   border:none;
   border-radius:8px;
   background:#007bff;
@@ -48,12 +47,12 @@ button {
 }
 
 .intervalRow input {
-  width:85px;
-  font-size:15px;
+  width:80px;
+  font-size:14px;
 }
 
 .intervalRow span {
-  font-size:14px;
+  font-size:13px;
   white-space:nowrap;
 }
 
@@ -65,7 +64,6 @@ button {
 .sectionRow {
   margin-top:10px;
 }
-
 </style>
 </head>
 
@@ -79,23 +77,17 @@ button {
 <button onclick="setSite('RECR')">RECR</button>
 </div>
 
-<!-- ALL NETS OPEN -->
-
 <div class="sectionRow">
 <label><b>All Nets Open</b></label><br>
 <input type="time" id="allOpenTime">
 <button onclick="openAllNets()">Add</button>
 </div>
 
-<!-- ALL NETS CLOSED -->
-
 <div class="sectionRow">
 <label><b>All Nets Closed</b></label><br>
 <input type="time" id="allCloseTime">
 <button onclick="closeAllNets()">Add</button>
 </div>
-
-<!-- CURRENT TIME -->
 
 <div class="sectionRow">
 <label><b>Current Time</b></label><br>
@@ -110,6 +102,10 @@ button {
 <div id="netsContainer"></div>
 
 <script>
+
+/* ---------- COPY BUFFER ---------- */
+
+let copiedIntervals = null;
 
 /* ---------- SITE SETUP ---------- */
 
@@ -246,6 +242,10 @@ function render(){
       box.appendChild(row);
     });
 
+    /* BUTTON ROW */
+
+    let btnRow=document.createElement("div");
+
     let addBtn=document.createElement("button");
     addBtn.innerText="Add Interval";
     addBtn.onclick=()=>{
@@ -253,7 +253,29 @@ function render(){
       render();
     };
 
-    box.appendChild(addBtn);
+    let copyBtn=document.createElement("button");
+    copyBtn.innerText="Copy";
+    copyBtn.onclick=()=>{
+      copiedIntervals = JSON.parse(JSON.stringify(net.intervals));
+      alert("Copied intervals from Net " + net.name);
+    };
+
+    let pasteBtn=document.createElement("button");
+    pasteBtn.innerText="Paste";
+    pasteBtn.onclick=()=>{
+      if(!copiedIntervals) {
+        alert("Nothing copied yet.");
+        return;
+      }
+      net.intervals = JSON.parse(JSON.stringify(copiedIntervals));
+      render();
+    };
+
+    btnRow.appendChild(addBtn);
+    btnRow.appendChild(copyBtn);
+    btnRow.appendChild(pasteBtn);
+
+    box.appendChild(btnRow);
     container.appendChild(box);
   });
 
@@ -268,13 +290,10 @@ function updateTotals(){
   let current=currentVal ? parseTime(currentVal) : new Date();
 
   let accumulated=0;
-  let maxPossible=accumulated;
 
   nets.forEach(net=>{
     accumulated+=netTotalHours(net,current);
   });
-
-  maxPossible=accumulated;
 
   let totalPossible=nets.reduce((s,n)=>s+n.weight*6,0);
   let threshold=totalPossible*(2/3);
