@@ -16,7 +16,6 @@
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
 
-/* Buttons */
 button {
   padding:7px 10px;
   margin:4px 3px;
@@ -27,12 +26,6 @@ button {
   color:white;
 }
 
-/* Header layout */
-.timeRow {
-  margin-top:10px;
-}
-
-/* Net boxes */
 .netBox {
   border:2px solid #ccc;
   padding:10px;
@@ -46,17 +39,16 @@ button {
   background:#ffe6e6;
 }
 
-/* Interval rows */
 .intervalRow {
   display:flex;
-  flex-wrap:nowrap;   /* prevents wrapping */
+  flex-wrap:nowrap;
   gap:4px;
   margin-top:6px;
   align-items:center;
 }
 
 .intervalRow input {
-  width:85px;         /* smaller width fixes wrapping */
+  width:85px;
   font-size:15px;
 }
 
@@ -67,6 +59,10 @@ button {
 
 .totals {
   font-weight:bold;
+  margin-top:10px;
+}
+
+.sectionRow {
   margin-top:10px;
 }
 
@@ -83,20 +79,30 @@ button {
 <button onclick="setSite('RECR')">RECR</button>
 </div>
 
-<!-- Separate header rows -->
+<!-- ALL NETS OPEN -->
 
-<div class="timeRow">
-<label>Default Nets Open Time</label>
-<input type="time" id="defaultOpen">
+<div class="sectionRow">
+<label><b>All Nets Open</b></label><br>
+<input type="time" id="allOpenTime">
+<button onclick="openAllNets()">Add</button>
 </div>
 
-<div class="timeRow">
-<label>Current Time</label>
+<!-- ALL NETS CLOSED -->
+
+<div class="sectionRow">
+<label><b>All Nets Closed</b></label><br>
+<input type="time" id="allCloseTime">
+<button onclick="closeAllNets()">Add</button>
+</div>
+
+<!-- CURRENT TIME -->
+
+<div class="sectionRow">
+<label><b>Current Time</b></label><br>
 <input type="time" id="currentTime" oninput="updateTotals()">
 </div>
 
 <div>
-<button onclick="applyDefault()">Apply Default Open Time</button>
 <button onclick="render()">Calculate</button>
 <div class="totals" id="totalsDisplay"></div>
 </div>
@@ -133,16 +139,37 @@ function parseTime(t){
   return new Date("2020-01-01T"+t);
 }
 
-function sessionEnd(open){
-  return new Date(open.getTime()+6*3600000);
-}
-
-/* ---------- STATUS ---------- */
-
 function netIsOpen(net){
   if(net.intervals.length===0) return false;
   let last=net.intervals[net.intervals.length-1];
   return last.open && !last.close;
+}
+
+/* ---------- GLOBAL ACTIONS ---------- */
+
+function openAllNets(){
+  let time=document.getElementById("allOpenTime").value;
+  if(!time) return;
+
+  nets.forEach(net=>{
+    net.intervals.push({open:time, close:""});
+  });
+
+  render();
+}
+
+function closeAllNets(){
+  let time=document.getElementById("allCloseTime").value;
+  if(!time) return;
+
+  nets.forEach(net=>{
+    if(netIsOpen(net)){
+      let last=net.intervals[net.intervals.length-1];
+      last.close=time;
+    }
+  });
+
+  render();
 }
 
 /* ---------- CALCULATIONS ---------- */
@@ -180,11 +207,8 @@ function render(){
   let container=document.getElementById("netsContainer");
   container.innerHTML="";
 
-  let defaultVal=document.getElementById("defaultOpen").value;
-  if(!defaultVal) return;
-
   let currentVal=document.getElementById("currentTime").value;
-  let current=currentVal ? parseTime(currentVal) : sessionEnd(parseTime(defaultVal));
+  let current=currentVal ? parseTime(currentVal) : new Date();
 
   nets.forEach(net=>{
 
@@ -236,29 +260,21 @@ function render(){
   updateTotals();
 }
 
-/* ---------- TOTAL DISPLAY ---------- */
+/* ---------- TOTALS ---------- */
 
 function updateTotals(){
 
-  let defaultVal=document.getElementById("defaultOpen").value;
-  if(!defaultVal) return;
-
   let currentVal=document.getElementById("currentTime").value;
-  let current=currentVal ? parseTime(currentVal) : sessionEnd(parseTime(defaultVal));
+  let current=currentVal ? parseTime(currentVal) : new Date();
 
   let accumulated=0;
-  let maxPossible=0;
+  let maxPossible=accumulated;
 
   nets.forEach(net=>{
     accumulated+=netTotalHours(net,current);
-
-    if(netIsOpen(net)){
-      let remaining=(sessionEnd(parseTime(defaultVal))-current)/3600000;
-      if(remaining>0) maxPossible+=remaining*net.weight;
-    }
   });
 
-  maxPossible+=accumulated;
+  maxPossible=accumulated;
 
   let totalPossible=nets.reduce((s,n)=>s+n.weight*6,0);
   let threshold=totalPossible*(2/3);
@@ -266,23 +282,10 @@ function updateTotals(){
   document.getElementById("totalsDisplay").innerHTML=
     `Accumulated Net Hours: ${accumulated.toFixed(2)}<br>
      Total Nets Open: ${totalNetsOpen()}<br>
-     Maximum Possible: ${maxPossible.toFixed(2)}<br>
-     Threshold: ${threshold.toFixed(2)}<br>
-     Status: ${maxPossible>=threshold?"✅ Reachable":"❌ Not Reachable"}`;
+     Threshold: ${threshold.toFixed(2)}`;
 }
 
-/* ---------- BUTTONS ---------- */
-
-function applyDefault(){
-  let val=document.getElementById("defaultOpen").value;
-  if(!val) return;
-
-  nets.forEach(net=>{
-    net.intervals=[{open:val, close:""}];
-  });
-
-  render();
-}
+/* ---------- SITE ---------- */
 
 function setSite(site){
   if(site==="Palo") nets=cloneTemplate(paloTemplate);
