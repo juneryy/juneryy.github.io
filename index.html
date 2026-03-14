@@ -2,7 +2,6 @@
 <html>
 <head>
 
-<link rel="manifest" href="manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,6 +12,7 @@
 <title>Net Hours Calculator</title>
 
 <style>
+
 body { font-family: Arial; padding:10px; margin:0; background:#f9f9f9; }
 h2 { text-align:center; }
 
@@ -65,6 +65,7 @@ button {
 .sectionRow {
   margin-top:10px;
 }
+
 </style>
 </head>
 
@@ -136,6 +137,10 @@ function parseTime(t){
   return new Date("2020-01-01T"+t);
 }
 
+function roundHundredths(num){
+  return Math.round(num * 100) / 100;
+}
+
 function netIsOpen(net){
   if(net.intervals.length===0) return false;
   let last=net.intervals[net.intervals.length-1];
@@ -169,9 +174,10 @@ function closeAllNets(){
   render();
 }
 
-/* ---------- CALCULATIONS ---------- */
+/* ---------- NET HOURS ---------- */
 
-function netTotalHours(net,current){
+function netTotalHoursRaw(net,current){
+
   let total=0;
 
   net.intervals.forEach(int=>{
@@ -188,6 +194,8 @@ function netTotalHours(net,current){
 
   return total;
 }
+
+/* ---------- TOTAL OPEN NETS ---------- */
 
 function totalNetsOpen(){
   let total=0;
@@ -214,9 +222,10 @@ function render(){
 
     if(!netIsOpen(net)) box.classList.add("closed");
 
-    let total=netTotalHours(net,current);
+    let raw = netTotalHoursRaw(net,current);
+    let rounded = roundHundredths(raw);
 
-    box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) — ${total.toFixed(2)} hrs</b>`;
+    box.innerHTML=`<b>${net.name} (${net.weight} ${net.weight===1?"net":"nets"}) — ${rounded.toFixed(2)} hrs</b>`;
 
     net.intervals.forEach((interval,j)=>{
 
@@ -232,8 +241,16 @@ function render(){
       `;
 
       let inputs=row.querySelectorAll("input");
-      inputs[0].oninput=e=>{ interval.open=e.target.value; updateTotals(); };
-      inputs[1].oninput=e=>{ interval.close=e.target.value; updateTotals(); };
+
+      inputs[0].oninput=e=>{
+        interval.open=e.target.value;
+        updateTotals();
+      };
+
+      inputs[1].oninput=e=>{
+        interval.close=e.target.value;
+        updateTotals();
+      };
 
       row.querySelector("button").onclick=()=>{
         net.intervals.splice(j,1);
@@ -264,7 +281,7 @@ function render(){
     let pasteBtn=document.createElement("button");
     pasteBtn.innerText="Paste";
     pasteBtn.onclick=()=>{
-      if(!copiedIntervals) {
+      if(!copiedIntervals){
         alert("Nothing copied yet.");
         return;
       }
@@ -293,11 +310,15 @@ function updateTotals(){
   let accumulated=0;
 
   nets.forEach(net=>{
-    accumulated+=netTotalHours(net,current);
+    let raw = netTotalHoursRaw(net,current);
+    let rounded = roundHundredths(raw);
+    accumulated += rounded;
   });
 
+  accumulated = roundHundredths(accumulated);
+
   let totalPossible=nets.reduce((s,n)=>s+n.weight*6,0);
-  let threshold=totalPossible*(2/3);
+  let threshold=roundHundredths(totalPossible*(2/3));
 
   document.getElementById("totalsDisplay").innerHTML=
     `Accumulated Net Hours: ${accumulated.toFixed(2)}<br>
@@ -308,20 +329,15 @@ function updateTotals(){
 /* ---------- SITE ---------- */
 
 function setSite(site){
+
   if(site==="Palo") nets=cloneTemplate(paloTemplate);
   if(site==="Offsite") nets=cloneTemplate(numberedTemplate(10));
   if(site==="RECR") nets=cloneTemplate(numberedTemplate(11));
+
   render();
 }
 
 </script>
-  
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js');
-}
-</script>
 
 </body>
 </html>
-
