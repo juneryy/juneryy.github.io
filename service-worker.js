@@ -1,4 +1,4 @@
-const CACHE_NAME = "net-hours-v3";
+const CACHE_NAME = "net-hours-v10";
 
 const FILES_TO_CACHE = [
   "./",
